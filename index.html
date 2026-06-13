@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>写真報告書</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="topbar" class="topbar">
+  <div class="toolbarRow row1">
+    <button id="hideMenuBtn" class="menu">メニュー隠す</button>
+    <label class="btn">写真追加<input id="fileInput" type="file" multiple accept="image/*"></label>
+    <button id="undoBtn">戻る</button>
+    <button id="redoBtn">進む</button>
+    <button id="addPageBtn">ページ追加</button>
+  </div>
+  <div class="toolbarRow row2">
+    <button id="moveBtn">選択写真移動OFF</button>
+    <button id="deleteBtn" class="danger">選択写真削除</button>
+    <button id="deletePageBtn" class="danger">選択ページ削除</button>
+  </div>
+  <div class="toolbarRow row3">
+    <button id="saveWorkBtn">途中保存</button>
+    <select id="projectSelect"></select>
+    <button id="loadWorkBtn">保存読込</button>
+  </div>
+  <div class="toolbarRow row4">
+    <button id="jpegBtn" class="save">JPEG保存</button>
+    <button id="pdfBtn" class="save">PDF保存</button>
+    <button id="printBtn" class="print">印刷</button>
+    <button id="completeBtn" class="complete">完了保存</button>
+  </div>
+</header>
+
+<button id="showMenuBtn" class="showMenu hidden">メニュー出す</button>
+
+<main id="main" class="main">
+  <div id="help" class="help">JPEG/PDF/印刷は「全」「選択」「3,5,6」指定に対応。完了保存は全ページをまとめて保存します。</div>
+  <div id="pages"></div>
+</main>
+
+<div id="projectDialog" class="dialog hidden">
+  <div class="dialogBox">
+    <div class="dialogTitle">保存読込</div>
+    <select id="dialogProjectSelect"></select>
+    <div class="dialogButtons">
+      <button id="dialogLoadBtn">読込</button>
+      <button id="dialogDeleteBtn" class="danger">削除</button>
+      <button id="dialogCloseBtn" class="menu">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="printArea" class="printArea"></div>
+<canvas id="canvas"></canvas>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
