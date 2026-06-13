@@ -287,7 +287,7 @@ async function printPages(){
 }
 async function buildPdfFile(prefix,targetPages){
  const J=window.jspdf&&window.jspdf.jsPDF;
- if(!J){alert('PDF部品を読み込めませんでした。通信状態を確認してページを再読み込みしてください。');return null}
+ if(!J){alert('PDF部品を読み込めませんでした。ページを再読み込みしてください。');return null}
 
  const targets=targetPages&&targetPages.length?targetPages:pages.map((_,i)=>i);
  const pdf=new J('p','mm','a4');
@@ -349,10 +349,9 @@ function base64Of(dataUrl){return dataUrl&&dataUrl.includes(',')?dataUrl.split('
 async function saveFiles(files,label){
  files=(files||[]).filter(Boolean);
  if(!files.length)return false;
-
- // Androidアプリ版は従来どおりCapacitor共有を使う
  const FS=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Filesystem;
  const Share=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Share;
+
  if(FS){
   try{
    const uris=[];
@@ -362,64 +361,62 @@ async function saveFiles(files,label){
     const uriResult=await FS.getUri({path,directory:'CACHE'});
     if(uriResult&&uriResult.uri)uris.push(uriResult.uri);
    }
-   if(!Share||!uris.length)throw new Error('共有部品がありません');
+   if(!Share||!uris.length){
+    setHelp(`${label}の保存画面を開けませんでした。`);
+    alert(`${label}の保存画面を開けませんでした。`);
+    return false;
+   }
    await Share.share({title:label,text:`${label}：${files.length}ファイル`,files:uris,dialogTitle:label});
    return true;
   }catch(e){
    console.error(e);
-   alert(`${label}の保存画面を開けませんでした。\n${e&&e.message?e.message:'原因不明'}`);
+   const raw=(e&&e.message?String(e.message):'');
+   const canceled=/cancel|cancelled|canceled|dismiss|中止|キャンセル/i.test(raw);
+   const msg=canceled?`${label}の保存画面をキャンセルしました。保存は中止しました。`:`${label}の保存画面を開けませんでした。もう一度実行してください。`;
+   setHelp(msg);alert(msg+(canceled?'':`\n${raw||'原因不明'}`));
    return false;
   }
  }
 
- // iPhone / iPad / PC ブラウザ版
+ // iPhone/iPad/Safari/GitHub Pages用
  try{
-   const made=[];
-   for(const file of files){
-     const blob=dataUrlToBlob(file.dataUrl,fileMime(file.kind));
-     made.push(new File([blob],file.name,{type:fileMime(file.kind)}));
-   }
-
-   // iPhone Safariは共有シートが一番確実
-   if(navigator.canShare && navigator.canShare({files:made}) && navigator.share){
-     await navigator.share({title:label,text:`${label}：${made.length}ファイル`,files:made});
-     return true;
-   }
-
-   // 共有できない環境はダウンロードに切替
-   for(const file of files){
-     downloadDataUrl(file.name,file.dataUrl,fileMime(file.kind));
-     await idleTick();
-   }
-   alert(`${label}を作成しました。Safariのダウンロードまたは共有から保存してください。`);
+  const made=[];
+  for(const file of files){
+   const blob=dataUrlToBlob(file.dataUrl,fileMime(file.kind));
+   made.push(new File([blob],file.name,{type:fileMime(file.kind)}));
+  }
+  if(navigator.canShare&&navigator.share&&navigator.canShare({files:made})){
+   await navigator.share({title:label,text:`${label}：${made.length}ファイル`,files:made});
    return true;
+  }
+  for(const file of files){
+   downloadDataUrl(file.name,file.dataUrl,fileMime(file.kind));
+   await idleTick();
+  }
+  alert(`${label}を作成しました。Safariのダウンロードから保存してください。`);
+  return true;
  }catch(e){
-   console.error(e);
-   // 最後の保険：1ファイルずつダウンロード
-   try{
-     for(const file of files){
-       downloadDataUrl(file.name,file.dataUrl,fileMime(file.kind));
-       await idleTick();
-     }
-     return true;
-   }catch(e2){
-     console.error(e2);
-     alert(`${label}に失敗しました。\n${e2&&e2.message?e2.message:(e&&e.message?e.message:'原因不明')}`);
-     return false;
-   }
+  console.error(e);
+  try{
+   for(const file of files){downloadDataUrl(file.name,file.dataUrl,fileMime(file.kind));await idleTick();}
+   return true;
+  }catch(e2){
+   console.error(e2);
+   alert(`${label}に失敗しました。\n${(e2&&e2.message)||(e&&e.message)||'原因不明'}`);
+   return false;
+  }
  }
 }
 
 function dataUrlToBlob(dataUrl,mime){
  const base64=base64Of(dataUrl);
- const bin=atob(base64);
- const len=bin.length;
- const bytes=new Uint8Array(len);
- for(let i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);
- return new Blob([bytes],{type:mime});
+ const byteCharacters=atob(base64);
+ const byteNumbers=new Array(byteCharacters.length);
+ for(let i=0;i<byteCharacters.length;i++)byteNumbers[i]=byteCharacters.charCodeAt(i);
+ return new Blob([new Uint8Array(byteNumbers)],{type:mime});
 }
 
-function downloadDataUrlfunction downloadDataUrl(name,dataUrl,mime){
+function downloadDataUrl(name,dataUrl,mime){
  const base64=base64Of(dataUrl);
  const byteCharacters=atob(base64);
  const byteNumbers=new Array(byteCharacters.length);
