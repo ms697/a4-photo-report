@@ -287,9 +287,10 @@ async function printPages(){
 }
 async function buildPdfFile(prefix,targetPages){
  const J=window.jspdf&&window.jspdf.jsPDF;
- if(!J){alert('PDF部品がありません。npm install後にsyncしてください。');return null}
-
  const targets=targetPages&&targetPages.length?targetPages:pages.map((_,i)=>i);
+ if(!J){
+  return await buildPdfFileFallback(targets);
+ }
  const pdf=new J('p','mm','a4');
 
  for(let n=0;n<targets.length;n++){
@@ -304,6 +305,88 @@ async function buildPdfFile(prefix,targetPages){
  const dataUrl=pdf.output('datauristring');
  const name=`${firstReportBase()}_${stampYMDHMS()}_${targets.length}ページ.pdf`;
  return {name,dataUrl,kind:'pdf'};
+}
+
+
+async function buildPdfFileFallback(targets){
+ const images=[];
+ for(const pi of targets){
+  const img=await renderPage(pi);
+  images.push(base64ToBytes(base64Of(img)));
+  clearRenderCanvas();
+  await idleTick();
+ }
+ const pdfBytes=makeSimplePdfFromJpegs(images,2480,3508);
+ const dataUrl='data:application/pdf;base64,'+bytesToBase64(pdfBytes);
+ const name=`${firstReportBase()}_${stampYMDHMS()}_${targets.length}ページ.pdf`;
+ return {name,dataUrl,kind:'pdf'};
+}
+function base64ToBytes(b64){
+ const bin=atob(b64),u=new Uint8Array(bin.length);
+ for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+ return u;
+}
+function bytesToBase64(bytes){
+ let bin='',chunk=0x8000;
+ for(let i=0;i<bytes.length;i+=chunk){bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+chunk));}
+ return btoa(bin);
+}
+function asciiBytes(str){const u=new Uint8Array(str.length);for(let i=0;i<str.length;i++)u[i]=str.charCodeAt(i);return u;}
+function concatBytes(parts){let len=0;for(const p of parts)len+=p.length;const out=new Uint8Array(len);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}return out;}
+function makeSimplePdfFromJpegs(jpegs,w,h){
+ const pageW=595.28,pageH=841.89;
+ const parts=[],offsets=[0];let pos=0,obj=1;
+ function add(part){parts.push(part);pos+=part.length;}
+ function addStr(t){add(asciiBytes(t));}
+ function objStart(n){offsets[n]=pos;addStr(n+' 0 obj
+');}
+ const n=jpegs.length;
+ const catalog=1,pagesObj=2;
+ let next=3;
+ const pageObjs=[],imgObjs=[],contentObjs=[];
+ for(let i=0;i<n;i++){pageObjs.push(next++);imgObjs.push(next++);contentObjs.push(next++);}
+ addStr('%PDF-1.4
+%âãÏÓ
+');
+ objStart(catalog);addStr(`<< /Type /Catalog /Pages ${pagesObj} 0 R >>
+endobj
+`);
+ objStart(pagesObj);addStr(`<< /Type /Pages /Count ${n} /Kids [${pageObjs.map(x=>x+' 0 R').join(' ')}] >>
+endobj
+`);
+ for(let i=0;i<n;i++){
+  objStart(pageObjs[i]);addStr(`<< /Type /Page /Parent ${pagesObj} 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im${i+1} ${imgObjs[i]} 0 R >> >> /Contents ${contentObjs[i]} 0 R >>
+endobj
+`);
+  objStart(imgObjs[i]);addStr(`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegs[i].length} >>
+stream
+`);add(jpegs[i]);addStr('
+endstream
+endobj
+');
+  const content=`q
+${pageW} 0 0 ${pageH} 0 0 cm
+/Im${i+1} Do
+Q
+`;
+  objStart(contentObjs[i]);addStr(`<< /Length ${content.length} >>
+stream
+${content}endstream
+endobj
+`);
+ }
+ const xref=pos;addStr(`xref
+0 ${next}
+0000000000 65535 f 
+`);
+ for(let i=1;i<next;i++)addStr(String(offsets[i]).padStart(10,'0')+' 00000 n 
+');
+ addStr(`trailer
+<< /Size ${next} /Root ${catalog} 0 R >>
+startxref
+${xref}
+%%EOF`);
+ return concatBytes(parts);
 }
 
 async function pdfSave(prefix,targetPages){
@@ -386,8 +469,33 @@ async function saveFiles(files,label){
   }
  }
 
- alert(`${label}はAndroidアプリで実行してください。`);
- return false;
+ // iPhone/Safari/GitHub Pages 用保存
+ try{
+  const shareFiles=[];
+  for(const file of files){
+   const blob=dataUrlToBlob(file.dataUrl,fileMime(file.kind));
+   shareFiles.push(new File([blob],file.name,{type:fileMime(file.kind)}));
+  }
+  if(navigator.canShare&&navigator.canShare({files:shareFiles})&&navigator.share){
+   await navigator.share({title:label,text:`${label}：${files.length}ファイル`,files:shareFiles});
+   return true;
+  }
+ }catch(e){console.warn('web share failed',e)}
+
+ // 共有が使えない場合は通常ダウンロード。iPhoneでは新しいタブで開く場合があります。
+ for(const file of files){
+  downloadDataUrl(file.name,file.dataUrl,fileMime(file.kind));
+  await idleTick();
+ }
+ return true;
+}
+
+function dataUrlToBlob(dataUrl,mime){
+ const base64=base64Of(dataUrl);
+ const byteCharacters=atob(base64);
+ const byteNumbers=new Array(byteCharacters.length);
+ for(let i=0;i<byteCharacters.length;i++)byteNumbers[i]=byteCharacters.charCodeAt(i);
+ return new Blob([new Uint8Array(byteNumbers)],{type:mime});
 }
 
 function downloadDataUrl(name,dataUrl,mime){
